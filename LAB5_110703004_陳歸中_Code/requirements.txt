@@ -1,0 +1,10 @@
+torch>=2.0
+gymnasium[atari]>=0.29
+ale-py>=0.8
+opencv-python>=4.7
+numpy>=1.23,<2
+wandb>=0.15
+imageio
+imageio[ffmpeg]
+imageio[pyav]
+gymnasium[classic-control]
