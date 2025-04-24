@@ -19,6 +19,7 @@ import time
 
 from gymnasium.wrappers import TimeLimit
 from gymnasium.envs.classic_control import CartPoleEnv
+from gym.vector import AsyncVectorEnv
 
 from model import DQN_task1, DQN_task2, init_weights
 
@@ -102,15 +103,27 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
         
+def make_env(env_name):
+    def _thunk():
+        return gym.make(env_name, render_mode="rgb_array")
+    return _thunk
 
 class DQNAgent:
     def __init__(self, args=None):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print("Using device:", self.device)
+
+        if args.num_envs > 1:
+            self.env = AsyncVectorEnv([make_env(args.env_name) for _ in range(args.num_envs)])
+            self.vector_env = True
+        else:
+            self.env = gym.make(args.env_name, render_mode="rgb_array")
+            self.vector_env = False
+
         # self.env = TimeLimit(CartPoleEnv(render_mode="rgb_array"), max_episode_steps=1000)
         # self.test_env = TimeLimit(CartPoleEnv(render_mode="rgb_array"), max_episode_steps=1000)
-        self.env = gym.make(args.env_name, render_mode="rgb_array")
+        # self.env = gym.make(args.env_name, render_mode="rgb_array")
         self.test_env = gym.make(args.env_name, render_mode="rgb_array")
         self.num_actions = self.env.action_space.n
         # self.preprocessor = AtariPreprocessor()
@@ -157,16 +170,20 @@ class DQNAgent:
             q_values = self.q_net(state_tensor)
         return q_values.argmax().item()
 
+    def preprocess(self, obs):
+        if self.preprocessor:
+            return self.preprocessor.reset(obs)
+        return obs
+
     def run(self, episodes=10000):
         for ep in range(episodes):
             start_time = time.time()
             obs, _ = self.env.reset()
-
-            if self.preprocessor:
-                state = self.preprocessor.reset(obs)
-                #raise RuntimeError("err")
+            if self.vector_env:
+                state = np.stack([self.preprocess(o) for o in obs])
             else:
-                state = obs
+                state = self.preprocess(obs)
+            
             done = False
             total_reward = 0
             step_count = 0
@@ -328,6 +345,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--save-dir", type=str, default="./results")
+    parser.add_argument("--num-envs", type=int, default=4)
     #task1
     # parser.add_argument("--wandb-run-name", type=str, default="CartPole-run")
     # parser.add_argument("--task", type=int, default=1)
